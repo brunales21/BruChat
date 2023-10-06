@@ -5,8 +5,9 @@ import java.io.*;
 import java.net.Socket;
 import java.util.NoSuchElementException;
 import java.util.Scanner;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @AllArgsConstructor
 public class Cliente {
@@ -15,66 +16,53 @@ public class Cliente {
     @NonNull
     private int port;
     private Socket socket;
-    private Scanner sc = new Scanner(System.in);
+    private Scanner sc;
+    private Scanner in;
+    private PrintStream out;
+    private ScheduledExecutorService executorService;
 
     public Cliente(String host, int port) {
         this.host = host;
         this.port = port;
+        this.sc = new Scanner(System.in);
+        this.executorService = Executors.newScheduledThreadPool(2); // 2 hilos para tareas programadas
     }
 
     private void connect() {
         try {
             this.socket = new Socket(host, port);
+            in = new Scanner(socket.getInputStream());
+            out = new PrintStream(socket.getOutputStream());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
     private void enviar() {
-        try (PrintStream out = new PrintStream(socket.getOutputStream())) {
+        try {
             out.println(sc.nextLine());
-        } catch (IOException | NoSuchElementException e) {
+        } catch (NoSuchElementException e) {
             //System.err.println(e.getMessage());
         }
     }
 
     private void recibir() {
-        try (Scanner in = new Scanner(socket.getInputStream())) {
+        try {
             System.out.println(in.nextLine());
-        } catch (IOException | NoSuchElementException e) {
+        } catch (NoSuchElementException e) {
             //throw new RuntimeException(e);
         }
     }
 
     private void initInputThread() {
-        timerReader = new Timer();
-        timerReader.scheduleAtFixedRate(inputThread, 0, 200);
+        // Programa la ejecución de recibir() cada 200 milisegundos
+        executorService.scheduleAtFixedRate(this::recibir, 0, 200, TimeUnit.MILLISECONDS);
     }
 
     private void initIOutputThread() {
-        timerWriter = new Timer();
-        timerWriter.scheduleAtFixedRate(outputThread, 0, 200);
+        // Programa la ejecución de enviar() cada 200 milisegundos
+        executorService.scheduleAtFixedRate(this::enviar, 0, 200, TimeUnit.MILLISECONDS);
     }
-
-    private Timer timerReader;
-    private Timer timerWriter;
-
-    private TimerTask inputThread = new TimerTask() {
-        @Override
-        public void run() {
-            recibir();
-        }
-    };
-
-    private TimerTask outputThread = new TimerTask() {
-        @Override
-        public void run() {
-            enviar();
-
-        }
-    };
-
-
 
     public static void main(String[] args) {
         Cliente cliente = new Cliente("localhost", 5222);
@@ -82,6 +70,5 @@ public class Cliente {
 
         cliente.initIOutputThread();
         cliente.initInputThread();
-
     }
 }
